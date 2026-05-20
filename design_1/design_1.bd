@@ -16,10 +16,10 @@
       },
       "rst_ps7_0_125M": "",
       "clk_wiz_0": "",
-      "xfft_0": "",
       "axis_fifo_0": "",
       "axis_fifo_1": "",
-      "axis_i2s_wrapper_0": ""
+      "axis_i2s_wrapper_0": "",
+      "xfft_0": ""
     },
     "interface_ports": {
       "DDR": {
@@ -1426,26 +1426,6 @@
           }
         }
       },
-      "xfft_0": {
-        "vlnv": "xilinx.com:ip:xfft:9.1",
-        "xci_name": "design_1_xfft_0_0",
-        "xci_path": "ip\\design_1_xfft_0_0\\design_1_xfft_0_0.xci",
-        "inst_hier_path": "xfft_0",
-        "parameters": {
-          "input_width": {
-            "value": "32"
-          },
-          "number_of_stages_using_block_ram_for_data_and_phase_factors": {
-            "value": "0"
-          },
-          "target_clock_frequency": {
-            "value": "125"
-          },
-          "target_data_throughput": {
-            "value": "1"
-          }
-        }
-      },
       "axis_fifo_0": {
         "vlnv": "xilinx.com:module_ref:axis_fifo:1.0",
         "xci_name": "design_1_axis_fifo_0_0",
@@ -2090,6 +2070,35 @@
             "right": "0"
           }
         }
+      },
+      "xfft_0": {
+        "vlnv": "xilinx.com:ip:xfft:9.1",
+        "xci_name": "design_1_xfft_0_1",
+        "xci_path": "ip\\design_1_xfft_0_1\\design_1_xfft_0_1.xci",
+        "inst_hier_path": "xfft_0",
+        "parameters": {
+          "implementation_options": {
+            "value": "automatically_select"
+          },
+          "input_width": {
+            "value": "24"
+          },
+          "number_of_stages_using_block_ram_for_data_and_phase_factors": {
+            "value": "0"
+          },
+          "target_clock_frequency": {
+            "value": "125"
+          },
+          "target_data_throughput": {
+            "value": "1"
+          },
+          "transform_length": {
+            "value": "64"
+          },
+          "xk_index": {
+            "value": "true"
+          }
+        }
       }
     },
     "interface_nets": {
@@ -2175,14 +2184,14 @@
           "ps7_0_axi_periph/M00_ACLK",
           "ps7_0_axi_periph/ACLK",
           "clk_wiz_0/clk_in1",
-          "xfft_0/aclk",
           "axis_fifo_0/s00_axis_aclk",
           "axis_i2s_wrapper_0/s00_axis_aclk",
           "axis_i2s_wrapper_0/m00_axis_aclk",
           "axis_fifo_0/m00_axis_aclk",
           "axis_fifo_1/s00_axis_aclk",
           "axis_fifo_1/m00_axis_aclk",
-          "axis_i2s_wrapper_0/clk_i"
+          "axis_i2s_wrapper_0/clk_i",
+          "xfft_0/aclk"
         ]
       },
       "processing_system7_0_FCLK_RESET0_N": {
