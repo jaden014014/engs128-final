@@ -316,11 +316,10 @@ end process;
 channel_toggle: process(aclk)
 begin
     if rising_edge(aclk) then
-        if fft_s_tlast = '1' and fft_s_tvalid = '1' and fft_s_tready = '1' then
-            -- Only switch if the other FIFO has data waiting
-            if channel_select = '0' and fifo_r_m_tvalid = '1' then
+        if fft_s_tlast = '1' then
+            if channel_select = '0' then
                 channel_select <= '1';
-            elsif channel_select = '1' and fifo_l_m_tvalid = '1' then
+            else
                 channel_select <= '0';
             end if;
         end if;
