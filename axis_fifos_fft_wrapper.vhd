@@ -23,7 +23,6 @@ entity axis_fifos_fft_wrapper is
         aclk            : in  std_logic;
         aresetn         : in  std_logic;
         lrclk_raw      : in  std_logic;
-        lrclk_bufg      : in  std_logic;
 
         s_axis_tvalid   : in  std_logic;
         s_axis_tdata    : in  std_logic_vector(DATA_WIDTH-1 downto 0);
@@ -80,7 +79,8 @@ component fft_feeder_fsm is
         config_tvalid_o : out std_logic;       
         config_tready_i : in std_logic;  
         
-        lrclk_bufg : in std_logic;
+        fft_tvalid_i    : in  std_logic;
+        fft_tready_i    : in  std_logic;        
         aclk     : in std_logic;
 		aresetn  : in std_logic;
 
@@ -108,13 +108,6 @@ component axis_fft is
     );
 end component;
 
-component counter is
-    Generic ( MAX_COUNT : integer);   
-    Port (  clk_i       : in STD_LOGIC;			
-            reset_i     : in STD_LOGIC;		
-            enable_i    : in STD_LOGIC;				
-            tc_o        : out STD_LOGIC);
-end component counter;
 
 -- Signals from Input FIFO to L and R data fifos
 signal fifo_0_m_tvalid  : std_logic;
@@ -160,22 +153,17 @@ signal config_tdata     : std_logic_vector(15 downto 0);
 
 -- Signals from FFT  to output FIFO
 signal fft_m_tvalid      : std_logic;
-signal fft_m_tdata       : std_logic_vector(DATA_WIDTH-1 downto 0);
+signal fft_m_tdata       : std_logic_vector(FFT_DATA_WIDTH-1 downto 0);
 signal fft_m_tlast       : std_logic;
 signal fft_m_tready      : std_logic;
-
+signal fft_m_tuser       : std_logic_vector(8-1 downto 0);
 
 signal lrclk_raw_sync1 : std_logic;
 signal lrclk_raw_sync2 : std_logic;
 
-signal lrclk_bufg_sync1 : std_logic;
-signal lrclk_bufg_sync2 : std_logic;
 
-signal tc_l : std_logic;
-signal tc_r : std_logic;
-signal reset_l : std_logic;
-signal reset_r : std_logic;
-
+signal channel_select : std_logic := '0'; -- 0=left, 1=right
+signal lock : std_logic := '0'; -- stop fft from running real fast if it just ran
 type state_type is (LeftSelect, RightSelect);	
 signal curr_state, next_state : state_type := RightSelect;
 
@@ -256,10 +244,11 @@ input_fifo_right : axis_fifo
 fft_feeder_inst: fft_feeder_fsm
     generic map(
     FIFO_DEPTH	=> FIFO_DEPTH,
-    FFT_DATA_WIDTH => DATA_WIDTH
+    FFT_DATA_WIDTH => FFT_DATA_WIDTH
 	)   
     port map(
-    lrclk_bufg => lrclk_bufg_sync2,
+    fft_tvalid_i => fft_s_tvalid,
+    fft_tready_i => fft_s_tready,
     aclk => aclk,
     aresetn => aresetn,    
     config_tdata_o     => config_tdata,
@@ -268,21 +257,6 @@ fft_feeder_inst: fft_feeder_fsm
     tlast_o             => fft_s_tlast
     );
     
-counter_left: counter
-    generic map(MAX_COUNT => 2*FIFO_DEPTH)
-    port map(
-    clk_i => lrclk_bufg_sync2,
-    reset_i => reset_l,
-    enable_i => '1',
-    tc_o => tc_l);
-    
-counter_right: counter
-    generic map(MAX_COUNT => 2*FIFO_DEPTH)
-    port map(
-    clk_i => lrclk_bufg_sync2,
-    reset_i => reset_r,
-    enable_i => '1',
-    tc_o => tc_r);
 
 fft_core_inst : axis_fft
     port map (
@@ -303,7 +277,8 @@ fft_core_inst : axis_fft
         m_axis_data_tdata    => fft_m_tdata,
         m_axis_data_tvalid   => fft_m_tvalid,
         m_axis_data_tready   => fft_m_tready,
-        m_axis_data_tlast    => fft_m_tlast
+        m_axis_data_tlast    => fft_m_tlast,
+        m_axis_data_tuser    => fft_m_tuser
     );
 
 
@@ -316,7 +291,7 @@ output_fifo_inst : axis_fifo
         s00_axis_aclk     => aclk,
         s00_axis_aresetn  => aresetn,
         s00_axis_tvalid   => fft_m_tvalid,
-        s00_axis_tdata    => (fft_m_tdata(23 downto 0) & lrclk_raw_sync2 & "0000000"),
+        s00_axis_tdata    => (fft_m_tdata(23 downto 0) & lrclk_raw_sync2 & fft_m_tuser(5 downto 0) & "0"),
         s00_axis_tstrb    => (others => '1'),
         s00_axis_tlast    => fft_m_tlast,
         s00_axis_tready   => fft_m_tready,
@@ -334,66 +309,28 @@ dbl_ff_sync: process(aclk) --Double FF synchronizer
 begin
     if rising_edge(aclk) then
         lrclk_raw_sync1 <= lrclk_raw;
-        lrclk_raw_sync2 <= lrclk_raw_sync1;
-        lrclk_bufg_sync1 <= lrclk_bufg;
-        lrclk_bufg_sync2 <= lrclk_bufg_sync1;        
+        lrclk_raw_sync2 <= lrclk_raw_sync1;   
     end if;
 end process;
 
-----------------------------------------------------------------------------
---FSM Next State Logic Process
-
-next_state_logic : process(curr_state, tc_l, tc_r)
+channel_toggle: process(aclk)
 begin
-
-	-- Add default conditions here
-	next_state <= curr_state; 
-    case curr_state is	
-
-        when LeftSelect  =>	
-            if tc_l = '1' then
-                next_state <= RightSelect;
+    if rising_edge(aclk) then
+        if fft_s_tlast = '1' and fft_s_tvalid = '1' and fft_s_tready = '1' then
+            -- Only switch if the other FIFO has data waiting
+            if channel_select = '0' and fifo_r_m_tvalid = '1' then
+                channel_select <= '1';
+            elsif channel_select = '1' and fifo_l_m_tvalid = '1' then
+                channel_select <= '0';
             end if;
-            
-        when RightSelect  =>	
-            if tc_r = '1' then
-                next_state <= LeftSelect ;
-            end if;
-        
-        when others => 
-            next_state <= LeftSelect ; 
-    end case;
-end process next_state_logic;
+        end if;
+    end if;
+end process;
 
--- FSM Output Logic Process
-fsm_output_logic : process(curr_state) 
-begin
-
-	-- Defaults
-	reset_l  <= '0';
-	reset_r <= '0';
-	case curr_state is		
-
-		when LeftSelect  =>		
-	       reset_r <= '1';
-		
-		when RightSelect =>		
-	       reset_l <= '1';
-		
-		when others =>
-	end case;	
-end process fsm_output_logic;
 
 ----------------------------------------------------------------------------
--- 5e. FSM State Update Process (synchronous, clocked)
-state_update : process (lrclk_bufg_sync2)
-begin
-	if (rising_edge(lrclk_bufg_sync2)) then
-		curr_state <= next_state; 
-	end if;
-end process state_update;
-
 --Logic
+fifo_0_m_tready <= fifo_l_s_tready when lrclk_raw_sync2 = '0' else fifo_r_s_tready;
 
 fifo_l_s_tvalid <= fifo_0_m_tvalid when lrclk_raw_sync2 = '0' else '0';
 fifo_r_s_tvalid <= '0'             when lrclk_raw_sync2 = '0' else fifo_0_m_tvalid;
@@ -401,22 +338,20 @@ fifo_r_s_tvalid <= '0'             when lrclk_raw_sync2 = '0' else fifo_0_m_tval
 fifo_l_s_tdata  <= fifo_0_m_tdata;
 fifo_l_s_tstrb  <= fifo_0_m_tstrb;
 fifo_l_s_tlast  <= fifo_0_m_tlast;
-fifo_l_s_tready <= fifo_0_m_tready;
+
 
 fifo_r_s_tdata  <= fifo_0_m_tdata;
 fifo_r_s_tstrb  <= fifo_0_m_tstrb;
 fifo_r_s_tlast  <= fifo_0_m_tlast;
-fifo_r_s_tready <= fifo_0_m_tready;
 
 
+fifo_l_m_tready <= fft_s_tready    when channel_select = '0' else '0';
+fifo_r_m_tready <= fft_s_tready    when channel_select = '1' else '0';
 
-fft_s_tvalid <= fifo_l_m_tvalid when tc_l = '1' else
-                fifo_r_m_tvalid when tc_r = '1' else
-                '0';
+fft_s_tvalid <= fifo_l_m_tvalid when channel_select = '0' else fifo_r_m_tvalid;
 
-fft_s_tdata  <= fifo_l_m_tdata(24 downto 1) & "000000000000000000000000" when tc_l = '1' else
-                fifo_r_m_tdata(24 downto 1) & "000000000000000000000000"   when tc_r = '1' else
-                (others => '0');
+fft_s_tdata <= "000000000000000000000000" & fifo_l_m_tdata(DATA_WIDTH -1 downto 8) when channel_select = '0' else
+               "000000000000000000000000" & fifo_r_m_tdata(DATA_WIDTH -1 downto 8);
 
     
 end Behavioral;

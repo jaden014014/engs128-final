@@ -18,7 +18,6 @@ entity axis_fifo is
 		FIFO_DEPTH	: integer	:= 1024
 	);
 	port (
-	
 		-- Ports of Axi Responder Bus Interface S00_AXIS
 		s00_axis_aclk     : in std_logic;
 		s00_axis_aresetn  : in std_logic;

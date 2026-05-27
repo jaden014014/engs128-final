@@ -22,8 +22,9 @@ entity fft_feeder_fsm is
         config_tdata_o : out std_logic_vector(15 downto 0);
         config_tvalid_o : out std_logic;       
         config_tready_i : in std_logic;  
-        
-        lrclk_bufg : in std_logic;
+
+        fft_tvalid_i    : in  std_logic;
+        fft_tready_i    : in  std_logic;        
         aclk     : in std_logic;
 		aresetn  : in std_logic;
 
@@ -34,36 +35,21 @@ end fft_feeder_fsm;
 
 architecture Behavioral of fft_feeder_fsm is
 
-signal tc : std_logic := '0';
-signal lrclk_sync1 : std_logic;
-signal lrclk_sync2 : std_logic;
 signal data_o : std_logic_vector(FFT_DATA_WIDTH-1 downto 0);
 
-type state_type is (ResetState, ConfigState, RunState);	
+type state_type is (ResetState, ConfigState, RunState, AssertTlastState);	
 signal curr_state, next_state : state_type := ResetState;
 
-component counter is
-    Generic ( MAX_COUNT : integer := FIFO_DEPTH);   
-    Port (  clk_i       : in STD_LOGIC;			
-            reset_i     : in STD_LOGIC;		
-            enable_i    : in STD_LOGIC;				
-            tc_o        : out STD_LOGIC);
-end component counter;
+signal sample_count : integer range 0 to FIFO_DEPTH := 0;
 
 
 begin
 
-counter_inst: counter
-    port map(
-    clk_i => lrclk_sync2,
-    reset_i => tc,
-    enable_i => '1',
-    tc_o => tc);
 
 ----------------------------------------------------------------------------
 --FSM Next State Logic Process
 
-next_state_logic : process(curr_state, config_tready_i, aresetn, tc)
+next_state_logic : process(curr_state, config_tready_i, aresetn, fft_tvalid_i, fft_tready_i, sample_count)
 begin
 
 	-- Add default conditions here
@@ -82,11 +68,19 @@ begin
                 end if;
             
             when RunState =>
-                if tc = '1' then
-                    next_state <= ConfigState;
-                else next_state <= RunState;
+                if fft_tvalid_i = '1' and fft_tready_i = '1' then
+                    if sample_count = FIFO_DEPTH - 2 then
+                        next_state        <= AssertTlastState;
+                    end if;
                 end if;
-            
+                
+             when AssertTlastState =>	
+                if fft_tvalid_i = '1' and fft_tready_i = '1' then
+                    if sample_count = FIFO_DEPTH - 1 then
+                        next_state        <= RunState;
+                    end if;
+                end if;
+                       
             when others => -- this is like the "else" part of an if/else statement, but shouldn't reached
                 next_state <= ResetState; -- can put a default here in case something weird happens in the hardware
                 
@@ -109,29 +103,36 @@ begin
 		
 		when ConfigState =>		
 			config_tvalid_o  <= '1';	
-		    tlast_o <= '1';
+
 		    
 		when RunState =>
-		
+		  
+		when AssertTlastState => 
+		    tlast_o <= '1';
+
 		when others =>
 	end case;	
 end process fsm_output_logic;
 
 ----------------------------------------------------------------------------
 -- 5e. FSM State Update Process (synchronous, clocked)
-state_update : process (aclk)
-begin
-	if (rising_edge(aclk)) then
-		curr_state <= next_state; 
-	end if;
-end process state_update;
-
-dbl_ff_sync: process(aclk) --Double FF synchronizer
+state_update : process(aclk)
 begin
     if rising_edge(aclk) then
-        lrclk_sync1 <= lrclk_bufg;
-        lrclk_sync2 <= lrclk_sync1;
+        curr_state <= next_state;
+        -- Reset count on state transitions
+        if curr_state = RunState or curr_state = AssertTlastState then
+            if fft_tvalid_i = '1' and fft_tready_i = '1' then
+                if sample_count = FIFO_DEPTH - 1 then
+                    sample_count <= 0;
+                else
+                    sample_count <= sample_count + 1;
+                end if;
+            end if;
+        else
+            sample_count <= 0;
+        end if;
     end if;
-end process;
+end process state_update;
 
 end Behavioral;
