@@ -166,7 +166,7 @@ signal fft_im             : std_logic_vector(FFT_DATA_WIDTH/2-1 downto 0);
 signal fft_re             : std_logic_vector(FFT_DATA_WIDTH/2-1 downto 0);
 signal sq_im              : std_logic_vector(FFT_DATA_WIDTH-1 downto 0);
 signal sq_re              : std_logic_vector(FFT_DATA_WIDTH-1 downto 0);
-signal sq_mag              : std_logic_vector(FFT_DATA_WIDTH/2-1 downto 0);
+signal sq_mag              : std_logic_vector(FFT_DATA_WIDTH/2 downto 0);
 signal channel_select : std_logic := '0'; -- 0=left, 1=right
 type state_type is (LeftSelect, RightSelect);	
 signal curr_state, next_state : state_type := RightSelect;
@@ -295,7 +295,7 @@ output_fifo_inst : axis_fifo
         s00_axis_aclk     => aclk,
         s00_axis_aresetn  => aresetn,
         s00_axis_tvalid   => fft_m_tvalid,
-        s00_axis_tdata    => (fft_m_tdata(23 downto 0) & lrclk_raw_sync2 & fft_m_tuser(5 downto 0) & "0"),
+        s00_axis_tdata    => (sq_mag(FFT_DATA_WIDTH/2 downto 1) & lrclk_raw_sync2 & fft_m_tuser(5 downto 0) & "0"),
         s00_axis_tstrb    => (others => '1'),
         s00_axis_tlast    => fft_m_tlast,
         s00_axis_tready   => fft_m_tready,
@@ -320,12 +320,8 @@ end process;
 channel_toggle: process(aclk)
 begin
     if rising_edge(aclk) then
-        if fft_s_tlast = '1' then
-            if channel_select = '0' then
-                channel_select <= '1';
-            else
-                channel_select <= '0';
-            end if;
+        if fft_s_tlast = '1' and fft_s_tvalid = '1' and fft_s_tready = '1' then
+            channel_select <= not channel_select;
         end if;
     end if;
 end process;
@@ -351,8 +347,8 @@ fifo_r_s_tlast  <= fifo_0_m_tlast;
 fifo_l_m_tready <= fft_s_tready    when channel_select = '0' else '0';
 fifo_r_m_tready <= fft_s_tready    when channel_select = '1' else '0';
 
-fft_s_tvalid <= (fifo_l_m_tvalid and (not config_tvalid)) when channel_select = '0' else 
-                (fifo_r_m_tvalid and (not config_tvalid));--?
+fft_s_tvalid <= fifo_l_m_tvalid when channel_select = '0' else 
+                (fifo_r_m_tvalid);
 
 fft_s_tdata <= "000000000000000000000000" & fifo_l_m_tdata(DATA_WIDTH -1 downto 8) when channel_select = '0' else
                "000000000000000000000000" & fifo_r_m_tdata(DATA_WIDTH -1 downto 8);
@@ -361,6 +357,6 @@ fft_im <= fft_m_tdata(FFT_DATA_WIDTH-1 downto FFT_DATA_WIDTH/2);
 fft_re <= fft_m_tdata(FFT_DATA_WIDTH/2-1 downto 0);
 sq_im <= std_logic_vector(signed(fft_im) * signed(fft_im));
 sq_re <= std_logic_vector(signed(fft_re) * signed(fft_re));
-sq_mag <= std_logic_vector(signed(sq_im(FFT_DATA_WIDTH-1 downto FFT_DATA_WIDTH/2)) + signed(sq_re(FFT_DATA_WIDTH-1 downto FFT_DATA_WIDTH/2))); --Can I just use all the data? or slice?
+sq_mag <= std_logic_vector(signed(sq_im(FFT_DATA_WIDTH-1 downto FFT_DATA_WIDTH/2)) + signed(sq_re(FFT_DATA_WIDTH-1 downto FFT_DATA_WIDTH/2))); 
     
 end Behavioral;
