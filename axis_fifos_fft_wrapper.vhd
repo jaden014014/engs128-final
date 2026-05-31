@@ -295,7 +295,7 @@ output_fifo_inst : axis_fifo
         s00_axis_aclk     => aclk,
         s00_axis_aresetn  => aresetn,
         s00_axis_tvalid   => fft_m_tvalid,
-        s00_axis_tdata    => (sq_mag(FFT_DATA_WIDTH/2 downto 1) & lrclk_raw_sync2 & fft_m_tuser(5 downto 0) & "0"),
+        s00_axis_tdata    => (sq_mag(FFT_DATA_WIDTH/2 downto 1) & not channel_select & fft_m_tuser(5 downto 0) & "0"),
         s00_axis_tstrb    => (others => '1'),
         s00_axis_tlast    => fft_m_tlast,
         s00_axis_tready   => fft_m_tready,

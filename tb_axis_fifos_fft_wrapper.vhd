@@ -24,8 +24,8 @@ architecture tb of tb_axis_fifos_fft_wrapper is
     -- Audio Constants
     -----------------------------------------------------------------------
     constant AUDIO_DATA_WIDTH : integer := 24;
-    constant SINE_FREQ_L        : real    := 1000.0;     -- 1 kHz tone
-    constant SINE_FREQ_R        : real    := 3000.0;     -- 3 kHz tone
+    constant SINE_FREQ_L        : real    := 750.0;     -- .75 kHz tone
+    constant SINE_FREQ_R        : real    := 6000.0;     -- 6 kHz tone
     constant SAMPLE_RATE      : real    := 48000.0;    -- 48 kHz
     constant T_SAMPLE         : real    := 1.0 / SAMPLE_RATE;
     constant SINE_AMPL        : real    := real(2**(AUDIO_DATA_WIDTH-2));
@@ -199,7 +199,7 @@ begin
 
     
             t := t + T_SAMPLE;
-            exit when t > (64.0 * T_SAMPLE * 4.0);
+            exit when t > (64.0 * T_SAMPLE * 10.0);
         end loop;
     
 
