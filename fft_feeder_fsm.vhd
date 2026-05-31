@@ -76,9 +76,9 @@ begin
                 
              when AssertTlastState =>	
                 if fft_tvalid_i = '1' and fft_tready_i = '1' then
-                    if sample_count = FIFO_DEPTH - 1 then
+--                    if sample_count = FIFO_DEPTH - 1 then
                         next_state        <= RunState;
-                    end if;
+--                    end if;
                 end if;
                        
             when others => -- this is like the "else" part of an if/else statement, but shouldn't reached

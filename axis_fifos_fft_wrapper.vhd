@@ -151,9 +151,9 @@ signal config_tvalid     : std_logic := '0';
 signal config_tready     : std_logic;
 signal config_tdata     : std_logic_vector(15 downto 0);
 
--- Signals from FFT  to output FIFO
+-- Signals from FFT to output FIFO
 signal fft_m_tvalid      : std_logic;
-signal fft_m_tdata       : std_logic_vector(FFT_DATA_WIDTH-1 downto 0);
+signal fft_m_tdata       : std_logic_vector(FFT_DATA_WIDTH-1 downto 0); --route this through math. 
 signal fft_m_tlast       : std_logic;
 signal fft_m_tready      : std_logic;
 signal fft_m_tuser       : std_logic_vector(8-1 downto 0);
@@ -162,8 +162,12 @@ signal lrclk_raw_sync1 : std_logic;
 signal lrclk_raw_sync2 : std_logic;
 
 
+signal fft_im             : std_logic_vector(FFT_DATA_WIDTH/2-1 downto 0);
+signal fft_re             : std_logic_vector(FFT_DATA_WIDTH/2-1 downto 0);
+signal sq_im              : std_logic_vector(FFT_DATA_WIDTH-1 downto 0);
+signal sq_re              : std_logic_vector(FFT_DATA_WIDTH-1 downto 0);
+signal sq_mag              : std_logic_vector(FFT_DATA_WIDTH/2-1 downto 0);
 signal channel_select : std_logic := '0'; -- 0=left, 1=right
-signal lock : std_logic := '0'; -- stop fft from running real fast if it just ran
 type state_type is (LeftSelect, RightSelect);	
 signal curr_state, next_state : state_type := RightSelect;
 
@@ -347,10 +351,16 @@ fifo_r_s_tlast  <= fifo_0_m_tlast;
 fifo_l_m_tready <= fft_s_tready    when channel_select = '0' else '0';
 fifo_r_m_tready <= fft_s_tready    when channel_select = '1' else '0';
 
-fft_s_tvalid <= fifo_l_m_tvalid when channel_select = '0' else fifo_r_m_tvalid;
+fft_s_tvalid <= (fifo_l_m_tvalid and (not config_tvalid)) when channel_select = '0' else 
+                (fifo_r_m_tvalid and (not config_tvalid));--?
 
 fft_s_tdata <= "000000000000000000000000" & fifo_l_m_tdata(DATA_WIDTH -1 downto 8) when channel_select = '0' else
                "000000000000000000000000" & fifo_r_m_tdata(DATA_WIDTH -1 downto 8);
 
+fft_im <= fft_m_tdata(FFT_DATA_WIDTH-1 downto FFT_DATA_WIDTH/2);
+fft_re <= fft_m_tdata(FFT_DATA_WIDTH/2-1 downto 0);
+sq_im <= std_logic_vector(signed(fft_im) * signed(fft_im));
+sq_re <= std_logic_vector(signed(fft_re) * signed(fft_re));
+sq_mag <= std_logic_vector(signed(sq_im(FFT_DATA_WIDTH-1 downto FFT_DATA_WIDTH/2)) + signed(sq_re(FFT_DATA_WIDTH-1 downto FFT_DATA_WIDTH/2))); --Can I just use all the data? or slice?
     
 end Behavioral;

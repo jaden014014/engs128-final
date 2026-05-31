@@ -31,8 +31,6 @@ architecture tb of tb_axis_fifos_fft_wrapper is
     constant SINE_AMPL        : real    := real(2**(AUDIO_DATA_WIDTH-2));
 
     -----------------------------------------------------------------------
-    -- DUT Signals
-    -----------------------------------------------------------------------
     signal aclk          : std_logic := '0';
     signal aresetn       : std_logic := '0';
     signal lrclk_raw     : std_logic := '0';
@@ -163,6 +161,24 @@ begin
             sine_data_tx_L <= sine_data_tx_v_L;
             sine_data_R    <= sine_data_v_R;
             sine_data_tx_R <= sine_data_tx_v_R;   
+
+            -- Left channel: lrclk low
+            wait until lrclk_raw = '0';
+            for i in 0 to AUDIO_DATA_WIDTH-1 loop
+                wait until falling_edge(bclk);
+                data_i <= sine_data_tx_v_L(AUDIO_DATA_WIDTH-1-i);
+            end loop;
+            wait until falling_edge(bclk);
+            data_i <= '0';
+    
+            sample_count_l := sample_count_l + 1;
+            if sample_count_l = 64 then
+                send_axi_sample(sine_data_tx_v_L & x"00", '1');
+                sample_count_l := 0;
+            else
+                send_axi_sample(sine_data_tx_v_L & x"00", '0');
+            end if;
+
             -- Right channel: lrclk high
             wait until lrclk_raw = '1';
             for i in 0 to AUDIO_DATA_WIDTH-1 loop
@@ -180,22 +196,7 @@ begin
                 send_axi_sample(sine_data_tx_v_R & x"00", '0');
             end if;
     
-            -- Left channel: lrclk low
-            wait until lrclk_raw = '0';
-            for i in 0 to AUDIO_DATA_WIDTH-1 loop
-                wait until falling_edge(bclk);
-                data_i <= sine_data_tx_v_L(AUDIO_DATA_WIDTH-1-i);
-            end loop;
-            wait until falling_edge(bclk);
-            data_i <= '0';
-    
-            sample_count_l := sample_count_l + 1;
-            if sample_count_l = 64 then
-                send_axi_sample(sine_data_tx_v_L & x"00", '1');
-                sample_count_l := 0;
-            else
-                send_axi_sample(sine_data_tx_v_L & x"00", '0');
-            end if;
+
     
             t := t + T_SAMPLE;
             exit when t > (64.0 * T_SAMPLE * 4.0);
@@ -210,5 +211,4 @@ begin
         report "Simulation complete." severity failure;
         wait;
     end process generate_audio_data;
-
 end tb;
